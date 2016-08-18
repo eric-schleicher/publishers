@@ -1,3 +1,5 @@
+Q = require('q');
+
 var Publishers = {
     "s3": {
         checkFile: function (localfile, s3Params) {
@@ -27,7 +29,12 @@ var Publishers = {
                         if (data && data.Contents[0].Key === s3Params.Key) {
                             searchResult=true;
                         }
-                        //structr.log("progress", bucketList.progressAmount, bucketList.progressTotal);
+                        if (typeof that.log==='function'){
+                            that.log("progress", bucketList.progressAmount, bucketList.progressTotal);
+                        }
+                        else{
+                            console.log("progress", bucketList.progressAmount, bucketList.progressTotal);
+                        }
                     }
                     catch(e){
                         rejectPromise(e);
@@ -82,8 +89,12 @@ var Publishers = {
                                 rejectPromise(err);
                             });
                             uploader.on('progress', function () {
-                                structr.log("progress", uploader.progressMd5Amount,
-                                    uploader.progressAmount, uploader.progressTotal);
+                                if (typeof that.log ==='function'){
+                                    that.log("progress", uploader.progressMd5Amount, uploader.progressAmount, uploader.progressTotal);
+                                }
+                                else{
+                                    console.log("progress", uploader.progressMd5Amount, uploader.progressAmount, uploader.progressTotal)
+                                }
                             });
                             uploader.on('end', function () {
                                 resolvePromise(localFile)

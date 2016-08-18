@@ -1,6 +1,6 @@
 {
   "name": "simple-publishers",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "An even higher level library to push files around",
   "main": "publishers.js",
   "scripts": {
@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/eric-schleicher/publishers#readme",
   "dependencies": {
+    "q": "^1.4.1",
     "s3": "^4.4.0"
   }
 }
