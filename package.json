@@ -1,0 +1,22 @@
+{
+  "name": "simple-publishers",
+  "version": "1.0.0",
+  "description": "An even higher level library to push files around",
+  "main": "publishers.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eric-schleicher/publishers.git"
+  },
+  "author": "Eric Schleicher",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/eric-schleicher/publishers/issues"
+  },
+  "homepage": "https://github.com/eric-schleicher/publishers#readme",
+  "dependencies": {
+    "s3": "^4.4.0"
+  }
+}
