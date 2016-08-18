@@ -1,6 +1,6 @@
 {
   "name": "simple-publishers",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "An even higher level library to push files around",
   "main": "publishers.js",
   "scripts": {
