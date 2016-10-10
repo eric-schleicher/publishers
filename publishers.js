@@ -1,4 +1,4 @@
-Q = require('q');
+var Q = require('q');
 
 var Publishers = {
     "s3": {
@@ -14,7 +14,7 @@ var Publishers = {
                 var listParams = {
                     "s3Params": {
                         "Bucket": s3Params.Bucket,
-                        //"Prefix": s3Params.Key
+                        "Prefix": s3Params.Key
                     }
                 };
                 var searchResult =false
@@ -26,9 +26,13 @@ var Publishers = {
                 bucketList.on('data', function (data) {
                     //inspect the result to see if the file we're looking for is present
                     try{
-                        if (data && data.Contents[0].Key === s3Params.Key) {
-                            searchResult=true;
+                        if (data && data.Contents.length){
+                            if (data.Contents[0].Key === s3Params.Key) {
+                                debugger;
+                                searchResult=true;
+                            }
                         }
+
                         if (typeof that.log==='function'){
                             that.log("progress", bucketList.progressAmount, bucketList.progressTotal);
                         }
@@ -97,7 +101,8 @@ var Publishers = {
                                 }
                             });
                             uploader.on('end', function () {
-                                resolvePromise(localFile)
+                                resolvePromise({"local": localFile, "remote":"https://" + s3Params.Bucket + ".s3.amazonaws.com/" + s3Params.Key});
+
                             });
 
                         })
