@@ -101,7 +101,7 @@ var Publishers = {
                                 }
                             });
                             uploader.on('end', function () {
-                                resolvePromise({"local": localFile, "remote":"https://" + s3Params.Bucket + ".s3.amazonaws.com/" + s3Params.Key});
+                                resolvePromise({"url":"https://" + s3Params.Bucket + ".s3.amazonaws.com/" + s3Params.Key});
 
                             });
 
