@@ -1,126 +1,213 @@
 var Q = require('q');
+var path = require('path');
+var fs = require('fs');
+var verbose = false;
 
 var Publishers = {
     "s3": {
-        checkFile: function (localfile, s3Params) {
-            var that = this;
+        setVerbose: function(newValue){
+            verbose =  newValue ? true : false;
+        },
+        checkFile: function(bucket, key){
+            console.info("checking existence of file:", key, "in bucket:", bucket);
+            var self = this;
+            return self.listObjects(bucket, key)
+                .then(function(results){
+                    return results.length? true:false;
+                })
+        },
+        listObjects: function(bucket, prefix) {
+            var self = this;
             //verify a client
-            if (!that.s3client) {
+
+            if (!self.s3client) {
                 return Q.reject(new Error("No Active S3 Client, make sure to call 'createClient' with your credenatials"));
             }
 
-            return Q.promise(function (resolvePromise, rejectPromise) {
-                //here we're just getting the list from the bucket that will be used
-                var listParams = {
-                    "s3Params": {
-                        "Bucket": s3Params.Bucket,
-                        "Prefix": s3Params.Key
-                    }
-                };
-                var searchResult =false
-                var bucketList = that.s3client.listObjects(listParams);
+            var params = {
+                s3Params:{
+                    "Bucket":bucket,
+                    "Prefix":prefix
+                }
+            };
 
-                bucketList.on('error', function (err) {
+            var results;
+            var numPages = 0;
+
+            return Q.promise(function(resolvePromise, rejectPromise){
+                //go ahead and get the list of the folder's content
+                var listEmitter = self.s3client.listObjects(params);
+
+                listEmitter.on("end", function(){
+                    console.info("listObjects complete with ", numPages + 1, "pages of data");
+                    resolvePromise(results);
+                });
+
+                listEmitter.on('error', function(err){
                     rejectPromise(err);
                 });
-                bucketList.on('data', function (data) {
-                    //inspect the result to see if the file we're looking for is present
-                    try{
-                        if (data && data.Contents.length){
-                            if (data.Contents[0].Key === s3Params.Key) {
-                                debugger;
-                                searchResult=true;
-                            }
-                        }
 
-                        if (typeof that.log==='function'){
-                            that.log("progress", bucketList.progressAmount, bucketList.progressTotal);
-                        }
-                        else{
-                            console.log("progress", bucketList.progressAmount, bucketList.progressTotal);
-                        }
+                listEmitter.on('data',  function(data){
+                    if (numPages===0){
+                        results = data.Contents;
+                        numPages++
                     }
-                    catch(e){
-                        rejectPromise(e);
-                    }
-                });
-                bucketList.on('end', function () {
-                    //if we got here, we didn't find it.
-                    try{
-
-                        resolvePromise(searchResult);
-                    }
-                    catch(e){
-                        debugger;
+                    else {
+                        results = results.concat(data.Contents);
                     }
                 });
 
-            })
-
+            });
         },
-        upload: function (localFile, s3Params, force) {
-            var that = this;
+        upload: function(localFile, bucket, key, force){
+            var self = this;
             //verify a client
-            if (!that.s3client) {
+            if (!self.s3client) {
                 return Q.reject(new Error("No Active S3 Client, make sure to call 'createClient' with your credenatials"));
             }
 
-            if (force === undefined) {
-                force = false;
-            }
+            //if force isn't present, coerce it to be boolean false.
+            force  = force || false;
 
-            //1) check the file exists in the s3bucket
             try {
-                return that.checkFile(localFile, s3Params)
-                    .then(function (fileExistsAlready) {
-                        if ((fileExistsAlready && force === true)|| !fileExistsAlready) {
-                            return
-                        }
-                        else {
-                            return Q.reject(new Error("The requested for upload already exists an force option not used"));
-                        }
-                    })
-                    .then(function () {
-                        var params = {
-                            localFile: localFile,
-                            s3Params: s3Params
-                        };
+                var shouldUpload = true;
+                if (force===false){
+                    return self.checkFile(bucket, key)
+                        .then(function(alreadyExists){
+                            if (!force && alreadyExists){
+                                shouldUpload = false;
+                                return Q.reject(new Error("Settings prevent upload of file ('force=false')"));
+                            }
+                            else{
+                                return uploadFile();
+                            }
+                        })
+                }
+                else{
+                    return uploadFile();
+                }
 
-                        return Q.promise(function (resolvePromise, rejectPromise) {
-                            var uploader = that.s3client.uploadFile(params);
 
-                            uploader.on('error', function (err) {
-                                rejectPromise(err);
-                            });
-                            uploader.on('progress', function () {
-                                if (typeof that.log ==='function'){
-                                    that.log("progress", uploader.progressMd5Amount, uploader.progressAmount, uploader.progressTotal);
+                function uploadFile(){
+                    console.info("File being uploaded to bucket:", bucket, "(", key, ")");
+                    var params = {
+                        localFile: localFile,
+                        s3Params: {
+                            Bucket: bucket,
+                            Key:key
+                        }
+                    };
+
+                    return Q.promise(function (resolvePromise, rejectPromise) {
+                        var uploader = self.s3client.uploadFile(params);
+
+                        uploader.on('error', function (err) {
+                            rejectPromise(err);
+                        });
+                        uploader.on('progress', function () {
+                            if (verbose){
+                                if (typeof self.log ==='function'){
+                                    self.log("progress", uploader.progressMd5Amount, uploader.progressAmount, uploader.progressTotal);
                                 }
                                 else{
                                     console.log("progress", uploader.progressMd5Amount, uploader.progressAmount, uploader.progressTotal)
                                 }
+                            }
+                        });
+
+                        uploader.on('end', function () {
+                            console.info("File Upload Completed for ", bucket +  "/" + key );
+                            resolvePromise({
+                                "url":"https://" + bucket + ".s3.amazonaws.com/" + key,
+                                "Bucket": bucket,
+                                "Key": key
                             });
-                            uploader.on('end', function () {
-                                resolvePromise({"url":"https://" + s3Params.Bucket + ".s3.amazonaws.com/" + s3Params.Key});
 
-                            });
+                        });
 
-                        })
+                    })
 
-                    });
+                }
             }
             catch (e) {
                 return Q.reject(e);
             }
         },
+        download: function(bucket, key, localFile){
+            var self = this;
+            //verify a client
+            if (!self.s3client) {
+                return Q.reject(new Error("No Active S3 Client, make sure to call 'createClient' with your credenatials"));
+            }
+
+            localFile = path.resolve(localFile);
+            return Q.promise(function(resolvePromise, rejectPromise){
+                try{
+                    fs.stat(localFile, function(err,fileStats){
+                        if(err && err.code === "ENOENT"){
+                            resolvePromise(false);
+                        }
+                        else if (err){
+                            rejectPromise(err)
+                        }
+                        else{
+                            resolvePromise(fileStats);
+                        }
+                    })
+                }
+                catch (e){
+                    rejectPromise(e);
+                }
+            })
+                .then(function(fileStat){
+                    if (!fileStat){
+                        //he file doesn't exist
+                        var params = {
+                            localFile: localFile,
+                            s3Params: {
+                                Bucket: bucket, //"s3 bucket name",
+                                Key: key, //"some/remote/file",
+                                // other options supported by getObject
+                                // See: http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#getObject-property
+                            }
+                        };
+                        return Q.promise(function(resolvePromise, rejectPromise){
+                            try{
+                                var downloader = self.s3client.downloadFile(params);
+                                downloader.on('error', function(err) {
+                                    console.error("unable to download:", err.stack);
+                                    rejectPromise(err);
+                                });
+                                downloader.on('progress', function() {
+                                    if (verbose){
+                                    console.log("progress", downloader.progressAmount, downloader.progressTotal);
+                                    }
+                                });
+                                downloader.on('end', function() {
+                                    console.log("done downloading file (" + key + ") from", bucket, ".  it's located here: ", localFile);
+                                    resolvePromise (localFile);
+                                });
+                            }
+                            catch(e){
+                                rejectPromise(e);
+                            }
+                        });
+                    }
+                    else{
+                        //the file exists; what should we do
+                        debugger;
+                    }
+                });
+        },
         createClient: function (accessKey, secretAccessKey) {
+            var self = this;
             try {
-                if (!this.s3) {
-                    this.s3 = require('s3');
+                if (!self.s3) {
+                    self.s3 = require('s3');
                 }
 
-                if (!this.s3Client) {
-                    this.s3client = this.s3.createClient({
+                if (!self.s3Client) {
+                    self.s3client = self.s3.createClient({
                         maxAsyncS3: 20,     // this is the default
                         s3RetryCount: 3,    // this is the default
                         s3RetryDelay: 1000, // this is the default
@@ -135,29 +222,11 @@ var Publishers = {
                     });
                 }
 
-                return this;
+                return self;
             }
             catch (e) {
                 throw e
             }
-        },
-        samplePublishOptions: function(){
-            return {
-                "method": "s3",
-                "destination": {
-                    Bucket: [s3Credentials.targetBucket].join("/")
-                    //Key: filename.split(path.sep).pop()
-                    // other options supported by putObject, except Body and ContentLength.
-                    // See: http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#putObject-property
-                },
-                "forceOverwrite":true,
-                "bucketSubfolder":thisHost,
-                "credentials": {
-                    accessKey: s3Credentials.accessKey,
-                    secretAccessKey: s3Credentials.secretAccessKey
-                },
-                cleanUpOnSuccess:true
-            };
         }
     }
 };
